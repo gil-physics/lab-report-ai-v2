@@ -1,39 +1,12 @@
 {
     "version": 2,
-    "builds": [
+    "rewrites": [
         {
-            "src": "api/analyze.py",
-            "use": "@vercel/python",
-            "config": {
-                "maxLambdaSize": "50mb"
-            }
-        },
-        {
-            "src": "api/document.js",
-            "use": "@vercel/node",
-            "config": {
-                "maxLambdaSize": "50mb"
-            }
+            "source": "/api/analyze",
+            "destination": "/api/analyze.py"
         }
     ],
-    "routes": [
-        {
-            "src": "/api/analyze",
-            "dest": "/api/analyze.py"
-        },
-        {
-            "src": "/api/document",
-            "dest": "/api/document.js"
-        }
-    ],
-    "env": {
-        "PYTHON_VERSION": "3.9"
-    },
     "functions": {
-        "api/document.js": {
-            "memory": 3008,
-            "maxDuration": 30
-        },
         "api/analyze.py": {
             "memory": 1024,
             "maxDuration": 10
