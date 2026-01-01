@@ -7,7 +7,15 @@ import numpy as np
 import json
 import os
 from scipy.optimize import curve_fit
-from sklearn.metrics import r2_score
+
+# Manual R² score calculation (sklearn 대체)
+def r2_score(y_true, y_pred):
+    """Calculate R² score without sklearn"""
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return 1 - (ss_res / ss_tot)
 
 # 현재 파일의 디렉토리 경로
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
