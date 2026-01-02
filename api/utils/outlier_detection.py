@@ -109,25 +109,11 @@ def remove_outliers_isolation_forest(data, column, contamination=0.1):
     Returns:
     - filtered_data: 이상치가 제거된 DataFrame
     - outliers_removed: 제거된 이상치 개수
-    """
-    try:
-        from sklearn.ensemble import IsolationForest
-        
-        if len(data) < 10:
-            return data, 0
-        
-        X = data[[column]].values
-        iso_forest = IsolationForest(contamination=contamination, random_state=42)
-        predictions = iso_forest.fit_predict(X)
-        
-        filtered_data = data[predictions == 1]
-        outliers_removed = len(data) - len(filtered_data)
-        
-        return filtered_data, outliers_removed
     
-    except ImportError:
-        # sklearn 없으면 IQR로 대체
-        return remove_outliers_iqr(data, column)
+    Note: sklearn이 제거되어 IQR 방법으로 대체됩니다.
+    """
+    # sklearn 의존성 제거 - IQR로 대체
+    return remove_outliers_iqr(data, column)
 
 # ============================================
 # 통합 함수
