@@ -161,7 +161,27 @@ export default function Home() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
-        throw new Error(`API 오류 (${response.status}): ${errorText}`);
+
+        // Try to parse structured error message
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.detail && typeof errorData.detail === 'object') {
+            // Structured error from backend
+            const { error, message, solution, debug_info } = errorData.detail;
+            let errorMsg = `❌ ${error || '오류 발생'}\n\n`;
+            errorMsg += `${message || '알 수 없는 오류가 발생했습니다.'}\n\n`;
+            if (solution) {
+              errorMsg += `💡 해결 방법: ${solution}`;
+            }
+            if (debug_info && process.env.NODE_ENV === 'development') {
+              errorMsg += `\n\n🔧 디버그: ${debug_info}`;
+            }
+            throw new Error(errorMsg);
+          }
+        } catch (parseError) {
+          // Fallback to simple error message
+          throw new Error(`API 오류 (${response.status}): ${errorText}`);
+        }
       }
 
       const apiResult = await response.json();
@@ -417,11 +437,13 @@ export default function Home() {
 
             {error && (
               <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                  <h3 className="font-semibold text-red-900">오류 발생</h3>
+                <div className="flex items-start gap-3 mb-2">
+                  <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-red-900 mb-2">오류 발생</h3>
+                    <div className="text-sm text-red-700 whitespace-pre-line">{error}</div>
+                  </div>
                 </div>
-                <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
 
