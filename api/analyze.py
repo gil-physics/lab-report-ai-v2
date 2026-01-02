@@ -42,7 +42,7 @@ class AnalysisRequest(BaseModel):
     data: DataPayload
     options: Optional[AnalysisOptions] = None
 
-@app.post("/")
+@app.post("/api/analyze")
 async def analyze(request: AnalysisRequest):
     try:
         logger.info("📊 Analysis request received")
