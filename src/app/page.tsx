@@ -158,13 +158,35 @@ export default function Home() {
         })
       });
 
+      // 🔍 먼저 전체 응답을 텍스트로 받아서 검사
+      const responseText = await response.text();
+      console.log('🔍 Raw Response Text:', responseText);
+      console.log('🔍 Response Status:', response.status);
+      console.log('🔍 Response OK:', response.ok);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
+        console.error('API Error - Status:', response.status);
+
+        // 빈 응답 체크
+        if (!responseText || responseText.trim() === '') {
+          throw new Error(`
+🔥 EMPTY RESPONSE FROM BACKEND 🔥
+
+Status: ${response.status}
+Status Text: ${response.statusText}
+
+백엔드가 빈 응답을 반환했습니다.
+- Python 서버가 크래시했을 가능성
+- Vercel 타임아웃 발생 가능성
+- 의존성 설치 실패 가능성
+
+Vercel Runtime Logs를 확인하세요!
+          `.trim());
+        }
 
         // 🔍 Try to parse structured error message from backend
         try {
-          const errorData = JSON.parse(errorText);
+          const errorData = JSON.parse(responseText);
 
           // Case 1: Backend returned detailed debugging info (status: "error")
           if (errorData.status === "error" && errorData.traceback) {
@@ -195,30 +217,65 @@ ${errorData.help || ''}
             if (solution) {
               errorMsg += `💡 해결 방법: ${solution}`;
             }
-            if (debug_info && process.env.NODE_ENV === 'development') {
+            if (debug_info) {
               errorMsg += `\n\n🔧 디버그: ${debug_info}`;
             }
             throw new Error(errorMsg);
           }
+
+          // Case 3: Other structured error
+          throw new Error(`API 오류 (${response.status}): ${JSON.stringify(errorData, null, 2)}`);
+
         } catch (parseError) {
           // If already an Error object thrown above, re-throw it
-          if (parseError instanceof Error) {
+          if (parseError instanceof Error && parseError.message.includes('🔥')) {
             throw parseError;
           }
-          // Otherwise fallback to simple error message
-          throw new Error(`API 오류 (${response.status}): ${errorText}`);
+
+          // JSON parsing failed - show raw response
+          throw new Error(`
+🔥 RESPONSE PARSING FAILED 🔥
+
+Status: ${response.status}
+Status Text: ${response.statusText}
+
+Raw Response (first 500 chars):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${responseText.substring(0, 500)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is not valid JSON! Backend might be returning:
+- HTML error page
+- Plain text error
+- Malformed JSON
+
+Check Vercel Logs for backend errors!
+          `.trim());
         }
       }
 
-      const apiResult = await response.json();
+      // Success case - parse JSON
+      try {
+        const apiResult = JSON.parse(responseText);
 
-      // 디버깅: API 응답 확인
-      console.log('API Response:', apiResult);
+        console.log('✅ API Response:', apiResult);
 
-      if (apiResult.status === 'success') {
-        setResults(apiResult as AnalysisResult);
-      } else {
-        throw new Error(apiResult.message || 'API 분석 실패');
+        if (apiResult.status === 'success') {
+          setResults(apiResult as AnalysisResult);
+        } else {
+          throw new Error(apiResult.message || 'API 분석 실패');
+        }
+      } catch (parseError) {
+        throw new Error(`
+🔥 SUCCESS RESPONSE PARSING FAILED 🔥
+
+Response appeared successful (200 OK) but JSON parsing failed.
+
+Raw Response:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${responseText.substring(0, 500)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        `.trim());
       }
     } catch (err: any) {
       console.error('Analysis failed:', err);
