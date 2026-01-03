@@ -3,4 +3,4 @@ pandas>=2.0.0
 numpy>=1.24.4
 scipy>=1.11.0
 pydantic>=2.0.0
-mangum
+mangum==0.17.0
