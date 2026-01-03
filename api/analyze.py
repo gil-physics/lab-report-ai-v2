@@ -224,6 +224,10 @@ async def analyze(request: AnalysisRequest):
 
 
 # Vercel Serverless Function handler
-# Vercel은 ASGI를 직접 지원하므로 Mangum 없이 app을 그대로 export
-# ⚠️ Mangum 제거: Vercel Python runtime과 호환성 문제로 인해 제거
-handler = app  # FastAPI app을 직접 handler로 사용
+# Vercel은 callable handler를 기대하므로 wrapper 함수 제공
+async def handler(scope, receive, send):
+    """
+    Vercel ASGI Handler - FastAPI app을 ASGI 프로토콜로 실행
+    Vercel은 이 함수를 직접 호출합니다.
+    """
+    await app(scope, receive, send)
