@@ -224,5 +224,6 @@ async def analyze(request: AnalysisRequest):
 
 
 # Vercel Serverless Function handler
-from mangum import Mangum
-handler = Mangum(app)
+# Vercel은 ASGI를 직접 지원하므로 Mangum 없이 app을 그대로 export
+# ⚠️ Mangum 제거: Vercel Python runtime과 호환성 문제로 인해 제거
+handler = app  # FastAPI app을 직접 handler로 사용
