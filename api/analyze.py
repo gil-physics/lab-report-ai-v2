@@ -183,6 +183,8 @@ async def analyze(request: AnalysisRequest):
             }
         )
 
+
 # Vercel Serverless Function handler
 from mangum import Mangum
-handler = Mangum(app, lifespan="off")
+handler = Mangum(app)
+
