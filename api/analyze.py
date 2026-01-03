@@ -6,17 +6,29 @@ import sys
 import os
 import logging
 
-# 로깅 설정
+# ---------------------------------------------------------
+# [핵심 수정] Vercel 경로 문제 해결 코드
+# ---------------------------------------------------------
+# 1. 현재 파일(analyze.py)이 위치한 폴더(api 폴더)의 절대 경로를 구합니다.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 2. 시스템 경로(sys.path)의 맨 앞(0번째)에 이 폴더를 강제로 추가합니다.
+#    이렇게 해야 파이썬이 바로 옆에 있는 'utils' 폴더를 볼 수 있습니다.
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# 3. 이제 안전하게 utils를 불러올 수 있습니다.
+from utils.curve_fitting import smart_curve_fitting
+# ---------------------------------------------------------
+
+# 로깅 설정 (기존과 동일)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# 현재 디렉토리를 sys.path에 추가
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from utils.curve_fitting import smart_curve_fitting
+# ▼▼▼ 이 아래부터는 기존의 app = FastAPI() 코드가 이어지면 됩니다 ▼▼▼
 
 app = FastAPI()
 
