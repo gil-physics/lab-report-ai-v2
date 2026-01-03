@@ -167,6 +167,41 @@ export default function Home() {
       if (!response.ok) {
         console.error('API Error - Status:', response.status);
 
+        // 🔥 405 에러 특별 처리
+        if (response.status === 405) {
+          const allowedMethods = response.headers.get('Allow') || '(not specified)';
+          throw new Error(`
+🔥 405 METHOD NOT ALLOWED 🔥
+
+Request Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  URL: ${response.url}
+  Method: POST
+  Content-Type: application/json
+
+Response Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Status: ${response.status} ${response.statusText}
+  Allowed Methods: ${allowedMethods}
+  Response Body Length: ${responseText.length} bytes
+
+Possible Causes:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. FastAPI route not found
+   → @app.post("/api/analyze") might not be registered
+   → Check Vercel Build Logs
+
+2. ASGI handler issue  
+   → 'handler = app' might not work
+   → Vercel might need different export
+
+3. Vercel routing problem
+   → Check vercel.json configuration
+
+Next: Check Vercel Deployment Logs!
+          `.trim());
+        }
+
         // 빈 응답 체크
         if (!responseText || responseText.trim() === '') {
           throw new Error(`
@@ -177,7 +212,7 @@ Status Text: ${response.statusText}
 
 백엔드가 빈 응답을 반환했습니다.
 - Python 서버가 크래시했을 가능성
-- Vercel 타임아웃 발생 가능성
+- Vercel 타임아웃 발생 가능성  
 - 의존성 설치 실패 가능성
 
 Vercel Runtime Logs를 확인하세요!
