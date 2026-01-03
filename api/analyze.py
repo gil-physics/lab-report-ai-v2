@@ -5,6 +5,7 @@ from typing import List, Optional
 import sys
 import os
 import logging
+import traceback  # 🔍 디버깅을 위한 traceback 모듈
 
 # ---------------------------------------------------------
 # [핵심 수정] Vercel 경로 문제 해결 코드
@@ -57,6 +58,10 @@ class AnalysisRequest(BaseModel):
 @app.post("/api/analyze")
 @app.post("/")
 async def analyze(request: AnalysisRequest):
+    """
+    🔍 디버깅 시스템이 적용된 분석 엔드포인트
+    에러 발생 시 정확한 파일, 줄 번호, 스택 트레이스를 반환합니다.
+    """
     try:
         logger.info("📊 Analysis request received")
         x_data = request.data.x
@@ -182,21 +187,38 @@ async def analyze(request: AnalysisRequest):
     except HTTPException:
         # HTTPException은 그대로 전달 (이미 포맷팅됨)
         raise
+        
     except Exception as e:
-        # 예상치 못한 에러
-        logger.error(f"❌ Unexpected error: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "서버 내부 오류",
-                "message": f"예상치 못한 오류가 발생했습니다: {type(e).__name__}",
-                "solution": "잠시 후 다시 시도해주세요. 문제가 계속되면 관리자에게 문의해주세요.",
-                "debug_info": str(e)
-            }
-        )
+        # 🔍 디버깅 시스템 - 모든 예외를 캐치하여 상세 정보 제공
+        
+        # 스택 트레이스 전체 캡처
+        tb_str = traceback.format_exc()
+        
+        # 에러 발생 위치 정보 추출
+        tb = sys.exc_info()[2]
+        if tb:
+            frame = traceback.extract_tb(tb)[-1]
+            debug_location = f"{frame.filename} line {frame.lineno}"
+        else:
+            debug_location = "Unknown location"
+        
+        # 상세한 에러 정보 로깅
+        logger.error(f"❌ FATAL ERROR at {debug_location}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Full traceback:\n{tb_str}")
+        
+        # 🎯 프론트엔드로 상세 에러 정보 반환
+        return {
+            "status": "error",
+            "error_type": type(e).__name__,
+            "message": str(e),
+            "traceback": tb_str,
+            "debug_info": debug_location,
+            "help": "위 traceback 정보를 확인하여 정확한 에러 위치를 파악하세요."
+        }
 
 
 # Vercel Serverless Function handler
 from mangum import Mangum
 handler = Mangum(app)
-

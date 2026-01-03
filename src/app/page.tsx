@@ -162,11 +162,33 @@ export default function Home() {
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
 
-        // Try to parse structured error message
+        // 🔍 Try to parse structured error message from backend
         try {
           const errorData = JSON.parse(errorText);
+
+          // Case 1: Backend returned detailed debugging info (status: "error")
+          if (errorData.status === "error" && errorData.traceback) {
+            const debugError = `
+🔥 BACKEND ERROR DETECTED 🔥
+
+Error Type: ${errorData.error_type || 'Unknown'}
+Location: ${errorData.debug_info || 'Unknown'}
+
+Message:
+${errorData.message || 'No message'}
+
+Full Traceback:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${errorData.traceback}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${errorData.help || ''}
+            `.trim();
+            throw new Error(debugError);
+          }
+
+          // Case 2: User-friendly error from backend (HTTPException)
           if (errorData.detail && typeof errorData.detail === 'object') {
-            // Structured error from backend
             const { error, message, solution, debug_info } = errorData.detail;
             let errorMsg = `❌ ${error || '오류 발생'}\n\n`;
             errorMsg += `${message || '알 수 없는 오류가 발생했습니다.'}\n\n`;
@@ -179,7 +201,11 @@ export default function Home() {
             throw new Error(errorMsg);
           }
         } catch (parseError) {
-          // Fallback to simple error message
+          // If already an Error object thrown above, re-throw it
+          if (parseError instanceof Error) {
+            throw parseError;
+          }
+          // Otherwise fallback to simple error message
           throw new Error(`API 오류 (${response.status}): ${errorText}`);
         }
       }
@@ -436,12 +462,19 @@ export default function Home() {
             )}
 
             {error && (
-              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
-                <div className="flex items-start gap-3 mb-2">
+              <div className="bg-red-50 border-2 border-red-600 rounded-xl p-6">
+                <div className="flex items-start gap-3 mb-3">
                   <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
                   <div className="flex-1">
-                    <h3 className="font-semibold text-red-900 mb-2">오류 발생</h3>
-                    <div className="text-sm text-red-700 whitespace-pre-line">{error}</div>
+                    <h3 className="font-bold text-red-900 mb-2 text-lg">🔍 디버깅 정보</h3>
+                    <div className="bg-white border border-red-300 rounded p-4 max-h-96 overflow-auto">
+                      <pre className="text-xs font-mono text-red-800 whitespace-pre-wrap break-words">
+                        {error}
+                      </pre>
+                    </div>
+                    <p className="text-sm text-red-700 mt-3">
+                      💡 위 에러 정보를 확인하여 정확한 문제 위치를 파악하세요.
+                    </p>
                   </div>
                 </div>
               </div>
