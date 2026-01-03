@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse  # 🔍 추가
 from pydantic import BaseModel
 from typing import List, Optional
 import sys
@@ -209,14 +210,17 @@ async def analyze(request: AnalysisRequest):
         logger.error(f"Full traceback:\n{tb_str}")
         
         # 🎯 프론트엔드로 상세 에러 정보 반환
-        return {
-            "status": "error",
-            "error_type": type(e).__name__,
-            "message": str(e),
-            "traceback": tb_str,
-            "debug_info": debug_location,
-            "help": "위 traceback 정보를 확인하여 정확한 에러 위치를 파악하세요."
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error_type": type(e).__name__,
+                "message": str(e),
+                "traceback": tb_str,
+                "debug_info": debug_location,
+                "help": "위 traceback 정보를 확인하여 정확한 에러 위치를 파악하세요."
+            }
+        )
 
 
 # Vercel Serverless Function handler
