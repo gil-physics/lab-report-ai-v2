@@ -1,40 +1,16 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse  # 🔍 추가
-from pydantic import BaseModel
-from typing import List, Optional
 import sys
 import os
-import logging
-import traceback  # 🔍 디버깅을 위한 traceback 모듈
+import traceback
 
-# ---------------------------------------------------------
-# [핵심 수정] Vercel 경로 문제 해결 코드
-# ---------------------------------------------------------
-# 1. 현재 파일(analyze.py)이 위치한 폴더(api 폴더)의 절대 경로를 구합니다.
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# 2. 시스템 경로(sys.path)의 맨 앞(0번째)에 이 폴더를 강제로 추가합니다.
-#    이렇게 해야 파이썬이 바로 옆에 있는 'utils' 폴더를 볼 수 있습니다.
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# 3. 이제 안전하게 utils를 불러올 수 있습니다.
-from utils.curve_fitting import smart_curve_fitting
-# ---------------------------------------------------------
-
-# 로깅 설정 (기존과 동일)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# ▼▼▼ 이 아래부터는 기존의 app = FastAPI() 코드가 이어지면 됩니다 ▼▼▼
+# 1. 가장 기초적인 것만 먼저 import 합니다. (절대 실패하지 않음)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from mangum import Mangum
 
 app = FastAPI()
 
-# CORS 설정
+# CORS 설정 (이건 무조건 실행되어야 함)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,191 +19,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class DataPayload(BaseModel):
-    x: List[float]
-    y: List[float]
+# 2. 에러 보관함
+startup_error = None
 
-class AnalysisOptions(BaseModel):
-    remove_outliers: Optional[bool] = False
-    manual_model: Optional[str] = None
-    return_chart_data: Optional[bool] = False
+# 3. [위험 구간] 무거운 라이브러리와 내 파일들을 "조심스럽게" 불러옵니다.
+try:
+    # 경로 설정 (아까 했던 것)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(current_dir)
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 
+    # 🚨 여기서 에러가 나면 catch 블록으로 점프합니다!
+    import numpy as np
+    import pandas as pd
+    from scipy.optimize import curve_fit
+    from utils.curve_fitting import smart_curve_fitting
+    
+    # 성공하면 플래그 설정
+    print("✅ All imports successful")
+
+except Exception as e:
+    # 에러가 나면 서버를 죽이지 말고, 에러 내용을 변수에 담아둡니다.
+    startup_error = {
+        "error_type": type(e).__name__,
+        "message": str(e),
+        "traceback": traceback.format_exc(),
+        "location": "Module Import / Startup Phase"
+    }
+    print(f"❌ Startup Error: {e}")
+
+
+# 4. 요청 모델 정의 (이건 에러 안 남)
 class AnalysisRequest(BaseModel):
-    data: DataPayload
-    options: Optional[AnalysisOptions] = None
+    data: dict
+    options: dict = None
 
+
+# 5. 엔드포인트 정의
 @app.post("/api/analyze")
 @app.post("/")
 async def analyze(request: AnalysisRequest):
-    """
-    🔍 디버깅 시스템이 적용된 분석 엔드포인트
-    에러 발생 시 정확한 파일, 줄 번호, 스택 트레이스를 반환합니다.
-    """
-    try:
-        logger.info("📊 Analysis request received")
-        x_data = request.data.x
-        y_data = request.data.y
-        
-        logger.info(f"Data received: X={len(x_data)} points, Y={len(y_data)} points")
-        
-        # 데이터 길이 검증
-        if len(x_data) != len(y_data):
-            logger.warning(f"Data length mismatch: X={len(x_data)}, Y={len(y_data)}")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "데이터 길이 불일치",
-                    "message": f"X축 데이터({len(x_data)}개)와 Y축 데이터({len(y_data)}개)의 개수가 다릅니다.",
-                    "solution": "CSV 파일에서 빈 셀을 제거하거나 데이터를 동일한 개수로 맞춰주세요."
-                }
-            )
-        
-        # 최소 데이터 포인트 검증
-        if len(x_data) < 3:
-            logger.warning(f"Insufficient data points: {len(x_data)}")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "데이터 부족",
-                    "message": f"회귀 분석을 위해서는 최소 3개 이상의 데이터가 필요합니다. (현재: {len(x_data)}개)",
-                    "solution": "더 많은 데이터를 추가하거나 측정값을 늘려주세요."
-                }
-            )
-        
-        # Convert to numpy arrays
-        import numpy as np
-        try:
-            x_array = np.array(x_data, dtype=float)
-            y_array = np.array(y_data, dtype=float)
-        except (ValueError, TypeError) as e:
-            logger.error(f"Data conversion failed: {str(e)}")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "잘못된 데이터 형식",
-                    "message": "데이터에 숫자가 아닌 값이 포함되어 있습니다.",
-                    "solution": "CSV 파일에서 텍스트나 특수문자를 제거하고 숫자만 포함되도록 해주세요."
-                }
-            )
-        
-        # NaN/Inf 체크
-        if np.any(np.isnan(x_array)) or np.any(np.isnan(y_array)):
-            logger.warning("NaN values detected in data")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "유효하지 않은 데이터",
-                    "message": "데이터에 빈 값(NaN)이 포함되어 있습니다.",
-                    "solution": "CSV 파일에서 빈 셀을 채우거나 해당 행을 삭제해주세요."
-                }
-            )
-        
-        if np.any(np.isinf(x_array)) or np.any(np.isinf(y_array)):
-            logger.warning("Infinite values detected in data")
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "극단적인 값 발견",
-                    "message": "데이터에 무한대 값이 포함되어 있습니다.",
-                    "solution": "데이터 범위를 확인하고 극단적으로 큰 값을 제거해주세요."
-                }
-            )
-        
-        logger.info(f"Data validation passed. Range: X=[{x_array.min():.2f}, {x_array.max():.2f}], Y=[{y_array.min():.2f}, {y_array.max():.2f}]")
-        
-        # Call smart curve fitting
-        logger.info("Starting curve fitting...")
-        result = smart_curve_fitting(x_array, y_array)
-        
-        if result is None:
-            logger.error("Curve fitting returned None - no suitable model found")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "회귀 분석 실패",
-                    "message": "데이터에 적합한 수학 모델을 찾을 수 없습니다.",
-                    "solution": "데이터의 패턴을 확인하거나 이상치를 제거한 후 다시 시도해주세요."
-                }
-            )
-        
-        logger.info(f"✅ Best model found: {result['model_key']} (R²={result['r_squared']:.4f})")
-        
-        # Calculate y_predicted for chart
-        if request.options and request.options.return_chart_data:
-            y_pred = result['func'](x_array, *result['params'])
-            result['y_predicted'] = y_pred.tolist()
-        
-        # Calculate residuals
-        y_pred = result['func'](x_array, *result['params'])
-        residuals = y_array - y_pred
-        
-        logger.info(f"Analysis completed successfully. Residuals: mean={residuals.mean():.4f}, std={residuals.std():.4f}")
-        
+    # 🕵️‍♂️ 사용자가 접속했을 때, 아까 담아둔 에러가 있다면 바로 보여줍니다.
+    if startup_error:
         return {
-            "status": "success",
-            "best_model": {
-                "name": result['name'],
-                "model_key": result['model_key'],
-                "r_squared": result['r_squared'],
-                "adj_r_squared": result.get('adj_r_squared', result['r_squared']),
-                "aic": result.get('aic', 0),
-                "equation": result['equation'],
-                "latex": result.get('equation', ''),
-                "parameters": result['params'],
-                "y_predicted": y_pred.tolist() if request.options and request.options.return_chart_data else None
-            },
-            "residuals": residuals.tolist(),
-            "data_info": {
-                "original_count": len(x_data),
-                "used_count": len(x_data),
-                "outliers_removed": 0
-            },
-            "alternative_models": result.get('all_results', [])
-        }
-        
-    except HTTPException:
-        # HTTPException은 그대로 전달 (이미 포맷팅됨)
-        raise
-        
-    except Exception as e:
-        # 🔍 디버깅 시스템 - 모든 예외를 캐치하여 상세 정보 제공
-        
-        # 스택 트레이스 전체 캡처
-        tb_str = traceback.format_exc()
-        
-        # 에러 발생 위치 정보 추출
-        tb = sys.exc_info()[2]
-        if tb:
-            frame = traceback.extract_tb(tb)[-1]
-            debug_location = f"{frame.filename} line {frame.lineno}"
-        else:
-            debug_location = "Unknown location"
-        
-        # 상세한 에러 정보 로깅
-        logger.error(f"❌ FATAL ERROR at {debug_location}")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error message: {str(e)}")
-        logger.error(f"Full traceback:\n{tb_str}")
-        
-        # 🎯 프론트엔드로 상세 에러 정보 반환
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "traceback": tb_str,
-                "debug_info": debug_location,
-                "help": "위 traceback 정보를 확인하여 정확한 에러 위치를 파악하세요."
+            "status": "error",
+            "detail": {
+                "error": "서버 초기화 실패 (Startup Failed)",
+                "message": startup_error["message"],
+                "solution": "requirements.txt나 파일 경로를 확인하세요.",
+                "debug_info": startup_error["traceback"]
             }
-        )
+        }
+    
+    # 에러가 없다면 정상 로직 실행 (지금은 테스트를 위해 간단한 응답만)
+    return {
+        "status": "success", 
+        "message": "서버가 정상적으로 라이브러리를 로드했습니다!", 
+        "data_received": len(request.data.get('x', []))
+    }
 
-
-# Vercel Serverless Function handler
-# Vercel은 callable handler를 기대하므로 wrapper 함수 제공
-async def handler(scope, receive, send):
-    """
-    Vercel ASGI Handler - FastAPI app을 ASGI 프로토콜로 실행
-    Vercel은 이 함수를 직접 호출합니다.
-    """
-    await app(scope, receive, send)
+# Vercel용 핸들러
+handler = Mangum(app)
