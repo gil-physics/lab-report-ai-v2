@@ -3,11 +3,18 @@
         {
             "source": "/api/analyze",
             "destination": "/api/analyze.py"
+        },
+        {
+            "source": "/api/health",
+            "destination": "/api/health.py"
         }
     ],
     "functions": {
         "api/analyze.py": {
             "maxDuration": 10
+        },
+        "api/health.py": {
+            "maxDuration": 5
         },
         "api/generate-report.js": {
             "maxDuration": 30
